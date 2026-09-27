@@ -142,8 +142,11 @@ const handleCallback = async () => {
 
 const signedIn = () => {
     els.connect.hidden = Boolean(accessToken);
-    els.account.textContent = accessToken ? "connected" : "";
+    els.account.textContent = accessToken ? "● connected" : "";
     els.battle.disabled = !accessToken;
+    els.modeNote.textContent = accessToken
+        ? "connected via Pollinations OAuth · your key, your pollen"
+        : "BYOP — sign in to spend your own pollen";
 };
 
 // --- catalog + matchup detection ---
@@ -366,9 +369,7 @@ const newPrompt = () => {
 };
 
 const boot = async () => {
-    els.modeNote.textContent = CLIENT_ID === "pk_your_app_key"
-        ? "Set CLIENT_ID to go live."
-        : "BYOP: your key, your pollen.";
+    els.modeNote.textContent = "BYOP — sign in to spend your own pollen";
     try {
         const handled = await handleCallback();
         signedIn();
