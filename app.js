@@ -9,7 +9,7 @@ const ENTER_URL = "https://enter.pollinations.ai";
 const GEN_URL = "https://gen.pollinations.ai";
 
 // Set this to your Pollinations App Key (pk_...) with this page as a Redirect URI.
-const CLIENT_ID = "pk_your_app_key";
+const CLIENT_ID = "pk_5drKIx9HHnvmdcqW";
 
 const redirectUri = `${location.origin}${location.pathname}`;
 
