@@ -1,61 +1,98 @@
-// Pollen Arena — blind side-by-side battles between official Pollinations
-// models and community models claiming the same name.
-//
-// Everything runs in the browser: BYOP OAuth (PKCE) for the key, the live
-// /v1/models catalog for matchups and pricing, and streamed chat completions
-// for each answer. No backend.
+// Pollen Arena — blind community-vs-official battles on Pollinations.
+// All browser: BYOP OAuth (PKCE), live /v1/models catalog, streamed answers.
 
 const ENTER_URL = "https://enter.pollinations.ai";
 const GEN_URL = "https://gen.pollinations.ai";
-
-// Set this to your Pollinations App Key (pk_...) with this page as a Redirect URI.
 const CLIENT_ID = "pk_5drKIx9HHnvmdcqW";
 
 const redirectUri = `${location.origin}${location.pathname}`;
 
+const $ = (id) => document.getElementById(id);
 const els = {
-    connect: document.querySelector("#connect"),
-    account: document.querySelector("#account"),
-    matchup: document.querySelector("#matchup"),
-    prompt: document.querySelector("#prompt"),
-    battle: document.querySelector("#battle"),
-    newprompt: document.querySelector("#newprompt"),
-    status: document.querySelector("#status"),
-    arena: document.querySelector("#arena"),
-    modelA: document.querySelector("#model-a"),
-    modelB: document.querySelector("#model-b"),
-    revealA: document.querySelector("#reveal-a"),
-    revealB: document.querySelector("#reveal-b"),
-    answerA: document.querySelector("#answer-a"),
-    answerB: document.querySelector("#answer-b"),
-    footA: document.querySelector("#foot-a"),
-    footB: document.querySelector("#foot-b"),
-    voteA: document.querySelector("#vote-a"),
-    voteB: document.querySelector("#vote-b"),
-    voteTie: document.querySelector("#vote-tie"),
-    verdict: document.querySelector("#verdict"),
-    verdictTitle: document.querySelector("#verdict-title"),
-    verdictPick: document.querySelector("#verdict-pick"),
-    verdictCost: document.querySelector("#verdict-cost"),
-    verdictLatency: document.querySelector("#verdict-latency"),
-    verdictNote: document.querySelector("#verdict-note"),
-    modeNote: document.querySelector("#mode-note"),
+    connect: $("connect"),
+    account: $("account"),
+    matchup: $("matchup"),
+    landing: $("landing"),
+    arena: $("arena"),
+    prompt: $("prompt"),
+    composer: $("composer"),
+    send: $("send"),
+    suggestions: $("suggestions"),
+    status: $("status"),
+    modelA: $("model-a"),
+    modelB: $("model-b"),
+    answerA: $("answer-a"),
+    answerB: $("answer-b"),
+    thinkA: $("think-a"),
+    thinkB: $("think-b"),
+    thinkingA: $("thinking-a"),
+    thinkingB: $("thinking-b"),
+    thinkingTextA: $("thinking-text-a"),
+    thinkingTextB: $("thinking-text-b"),
+    footA: $("foot-a"),
+    footB: $("foot-b"),
+    verdict: $("verdict"),
+    verdictBody: $("verdict-body"),
+    voteA: $("vote-a"),
+    voteB: $("vote-b"),
+    voteTie: $("vote-tie"),
+    verdictTitle: $("verdict-title"),
+    factPick: $("fact-pick"),
+    factCost: $("fact-cost"),
+    factLatency: $("fact-latency"),
+    factModels: $("fact-models"),
+    again: $("again"),
 };
 
-let accessToken = sessionStorage.getItem("arena_token") || null;
+let token = sessionStorage.getItem("arena_token") || null;
 let pairs = [];
 let current = null;
-const modelsById = new Map();
+let running = false;
+const models = new Map();
 
-const status = (text) => {
-    els.status.textContent = text;
+const setStatus = (t) => {
+    els.status.textContent = t;
+};
+const fmtPollen = (n) =>
+    n == null ? "—" : `${Number(n).toFixed(6)} pollen`;
+
+// ---------- suggestions (B/W svgs) ----------
+const icons = {
+    spark:
+        '<svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    code: '<svg viewBox="0 0 24 24"><path d="m9 8-4 4 4 4M15 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    poem: '<svg viewBox="0 0 24 24"><path d="M5 19c6 0 9-4 9-10V4M14 4h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    brain:
+        '<svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V8a3 3 0 0 0-3-3ZM9 9H7a2 2 0 0 0 0 4h2M15 13h2a2 2 0 0 0 0-4h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    flag: '<svg viewBox="0 0 24 24"><path d="M6 21V4M6 5h11l-2 3 2 3H6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const SUGGESTIONS = [
+    { icon: "spark", text: "Explain why the sky is blue" },
+    { icon: "code", text: "Write a binary search in Python" },
+    { icon: "poem", text: "Write a haiku about winter" },
+    { icon: "brain", text: "What are you thinking about?" },
+    { icon: "flag", text: "Name the capital of Burkina Faso" },
+];
+
+const renderSuggestions = () => {
+    els.suggestions.replaceChildren(
+        ...SUGGESTIONS.map((s) => {
+            const b = document.createElement("button");
+            b.className = "suggestion";
+            b.type = "button";
+            b.innerHTML = `${icons[s.icon]}<span>${s.text}</span>`;
+            b.addEventListener("click", () => {
+                els.prompt.value = s.text;
+                autosize();
+                updateSend();
+                els.prompt.focus();
+            });
+            return b;
+        }),
+    );
 };
 
-const fmtPollen = (n) =>
-    n === undefined || n === null ? "—" : `${Number(n).toFixed(6)} pollen`;
-
-// --- tiny PKCE helpers (same shape as the official OAuth demo) ---
-
+// ---------- PKCE ----------
 const randomBase64Url = () => {
     const bytes = crypto.getRandomValues(new Uint8Array(32));
     return btoa(String.fromCharCode(...bytes))
@@ -63,28 +100,19 @@ const randomBase64Url = () => {
         .replaceAll("/", "_")
         .replaceAll("=", "");
 };
-
-const challengeFor = async (verifier) => {
-    const digest = await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(verifier),
-    );
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+const challengeFor = async (v) => {
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+    return btoa(String.fromCharCode(...new Uint8Array(d)))
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replaceAll("=", "");
 };
 
 const connect = async () => {
-    if (CLIENT_ID === "pk_your_app_key") {
-        throw new Error(
-            "Set CLIENT_ID in app.js to your Pollinations App Key first.",
-        );
-    }
     const verifier = randomBase64Url();
     const state = randomBase64Url();
-    sessionStorage.setItem("oauth_verifier", verifier);
-    sessionStorage.setItem("oauth_state", state);
+    sessionStorage.setItem("v", verifier);
+    sessionStorage.setItem("s", state);
     const params = new URLSearchParams({
         response_type: "code",
         client_id: CLIENT_ID,
@@ -100,24 +128,19 @@ const connect = async () => {
 };
 
 const handleCallback = async () => {
-    const params = new URLSearchParams(location.search);
-    const code = params.get("code");
-    const oauthError = params.get("error");
-    if (!code && !oauthError) return false;
-
-    const expectedState = sessionStorage.getItem("oauth_state");
-    if (!expectedState || params.get("state") !== expectedState) {
-        throw new Error("OAuth state did not match.");
+    const p = new URLSearchParams(location.search);
+    const code = p.get("code");
+    const err = p.get("error");
+    if (!code && !err) return false;
+    if (p.get("state") !== sessionStorage.getItem("s")) {
+        throw new Error("OAuth state mismatch");
     }
-    const verifier = sessionStorage.getItem("oauth_verifier");
-    sessionStorage.removeItem("oauth_state");
-    sessionStorage.removeItem("oauth_verifier");
+    const verifier = sessionStorage.getItem("v");
+    sessionStorage.removeItem("s");
+    sessionStorage.removeItem("v");
     history.replaceState({}, "", location.pathname);
-
-    if (oauthError) throw new Error(`Authorization: ${oauthError}`);
-    if (!verifier) throw new Error("Missing PKCE verifier.");
-
-    const response = await fetch(`${ENTER_URL}/api/oauth/token`, {
+    if (err) throw new Error(`Authorization: ${err}`);
+    const res = await fetch(`${ENTER_URL}/api/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -128,84 +151,68 @@ const handleCallback = async () => {
             code_verifier: verifier,
         }),
     });
-    const token = await response.json();
-    if (!response.ok) {
-        throw new Error(
-            token.error_description ?? token.error ?? "Token exchange failed.",
-        );
-    }
-    accessToken = token.access_token;
-    // sessionStorage only: never localStorage or the URL.
-    sessionStorage.setItem("arena_token", accessToken);
+    const t = await res.json();
+    if (!res.ok) throw new Error(t.error_description ?? t.error ?? "token failed");
+    token = t.access_token;
+    sessionStorage.setItem("arena_token", token);
     return true;
 };
 
 const signedIn = () => {
-    els.connect.hidden = Boolean(accessToken);
-    els.account.textContent = accessToken ? "● connected" : "";
-    els.battle.disabled = !accessToken;
-    els.modeNote.textContent = accessToken
-        ? "connected via Pollinations OAuth · your key, your pollen"
-        : "BYOP — sign in to spend your own pollen";
+    els.connect.hidden = Boolean(token);
+    els.account.textContent = token ? "connected" : "";
+    updateSend();
 };
 
-// --- catalog + matchup detection ---
-
+// ---------- catalog ----------
 const baseName = (id) => id.split("/").pop().toLowerCase().replace(/:.*$/, "");
 
 const loadCatalog = async () => {
-    const response = await fetch(`${GEN_URL}/v1/models`);
-    const body = await response.json();
-    const models = body.data ?? body;
-    for (const model of models) modelsById.set(model.id, model);
-
+    const res = await fetch(`${GEN_URL}/v1/models`);
+    const body = await res.json();
+    const list = body.data ?? body;
+    for (const m of list) models.set(m.id, m);
     const official = new Map();
-    for (const model of models) {
-        if (model.community !== true && model.output_modalities?.includes("text")) {
-            official.set(baseName(model.id), model.id);
+    for (const m of list) {
+        if (m.community !== true && m.output_modalities?.includes("text")) {
+            official.set(baseName(m.id), m.id);
         }
     }
-    const found = [];
-    for (const model of models) {
-        if (model.community !== true) continue;
-        const officialId = official.get(baseName(model.id));
-        if (officialId && officialId !== model.id) {
-            found.push({ official: officialId, community: model.id });
-        }
+    pairs = [];
+    for (const m of list) {
+        if (m.community !== true) continue;
+        const o = official.get(baseName(m.id));
+        if (o && o !== m.id) pairs.push({ official: o, community: m.id });
     }
-    found.sort((a, b) => a.official.localeCompare(b.official));
-    pairs = found;
-
-    els.matchup.replaceChildren(
-        ...found.map((pair) => {
-            const option = document.createElement("option");
-            option.value = `${pair.official}||${pair.community}`;
-            option.textContent = `${pair.official}  vs  ${pair.community}`;
-            return option;
-        }),
-    );
-    return found.length;
+    pairs.sort((a, b) => a.official.localeCompare(b.official));
+    return pairs.length;
 };
 
-// --- cost estimation from the model's published pricing ---
+const pickPair = () => {
+    const pair = pairs[Math.floor(Math.random() * pairs.length)];
+    els.matchup.value = `${pair.official}||${pair.community}`;
+    current = pair;
+};
 
+// ---------- cost ----------
 const estimateCost = (modelId, usage) => {
-    const pricing = modelsById.get(modelId)?.pricing;
-    if (!pricing || !usage) return null;
-    const prompt = Number(pricing.promptTextTokens) * (usage.prompt_tokens ?? 0);
-    const completion =
-        Number(pricing.completionTextTokens) * (usage.completion_tokens ?? 0);
-    return prompt + completion;
+    const p = models.get(modelId)?.pricing;
+    if (!p || !usage) return null;
+    return (
+        Number(p.promptTextTokens) * (usage.prompt_tokens ?? 0) +
+        Number(p.completionTextTokens) * (usage.completion_tokens ?? 0)
+    );
 };
 
-// --- the battle ---
-
-const streamAnswer = async (modelId, prompt, answerEl) => {
+// ---------- streaming ----------
+// Reads OpenAI-style SSE: content deltas plus reasoning deltas (reasoning_content,
+// reasoning, or reasoning_content-ish fields) straight into their panes.
+async function stream(modelId, prompt, ui) {
     const started = performance.now();
-    const response = await fetch(`${GEN_URL}/v1/chat/completions`, {
+    const res = await fetch(`${GEN_URL}/v1/chat/completions`, {
         method: "POST",
         headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -214,29 +221,30 @@ const streamAnswer = async (modelId, prompt, answerEl) => {
             messages: [{ role: "user", content: prompt }],
         }),
     });
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(
-            error?.error?.message ?? `HTTP ${response.status} from ${modelId}`,
-        );
+    if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error?.message ?? `HTTP ${res.status}`);
     }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
     let text = "";
+    let thinking = "";
     let usage = null;
+
+    const firstByte = () => {
+        ui.answer.classList.add("cursor");
+    };
+    firstByte();
 
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const segments = buffer.split("\n\n");
-        buffer = segments.pop() ?? "";
-        for (const segment of segments) {
-            const line = segment
-                .split("\n")
-                .find((l) => l.startsWith("data:"));
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+            const line = part.split("\n").find((l) => l.startsWith("data:"));
             if (!line) continue;
             const data = line.slice(5).trim();
             if (!data || data === "[DONE]") continue;
@@ -246,155 +254,228 @@ const streamAnswer = async (modelId, prompt, answerEl) => {
             } catch {
                 continue;
             }
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-                text += delta;
-                answerEl.textContent = text;
+            const delta = chunk.choices?.[0]?.delta ?? {};
+            const reason =
+                delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
+            if (reason) {
+                thinking += reason;
+                ui.thinkingText.textContent = thinking;
+                if (ui.thinking.hidden === false) ui.scrollThinking();
+            }
+            if (delta.content) {
+                text += delta.content;
+                ui.answer.textContent = text;
+                ui.answer.scrollTop = ui.answer.scrollHeight;
             }
             if (chunk.usage) usage = chunk.usage;
         }
     }
-    return { text, usage, ms: performance.now() - started };
-};
+    ui.answer.classList.remove("cursor");
+    return { text, thinking, usage, ms: performance.now() - started };
+}
+
+// ---------- battle ----------
+const collect = (side) => ({
+    panel: document.querySelector(`[data-side="${side}"]`),
+    answer: side === "a" ? els.answerA : els.answerB,
+    thinking: side === "a" ? els.thinkingA : els.thinkingB,
+    thinkingText: side === "a" ? els.thinkingTextA : els.thinkingTextB,
+    toggle: side === "a" ? els.thinkA : els.thinkB,
+    foot: side === "a" ? els.footA : els.footB,
+    scrollThinking() {
+        this.thinkingText.parentElement.scrollTop =
+            this.thinkingText.parentElement.scrollHeight;
+    },
+});
 
 const runBattle = async () => {
-    if (!accessToken || !current) return;
     const prompt = els.prompt.value.trim();
-    if (!prompt) return;
+    if (!token || !prompt || running) return;
+    if (!current) pickPair();
+    running = true;
+    els.send.disabled = true;
 
-    sessionStorage.setItem("arena_prompt", prompt);
-    els.verdict.hidden = true;
+    // switch landing -> arena
+    els.landing.hidden = true;
     els.arena.hidden = false;
-    for (const el of [els.answerA, els.answerB]) {
-        el.textContent = "";
-        el.classList.add("streaming");
-    }
-    for (const el of [els.modelA, els.modelB, els.revealA, els.revealB]) {
-        el.textContent = "";
-    }
-    els.footA.textContent = "";
-    els.footB.textContent = "";
-    els.voteA.disabled = els.voteB.disabled = els.voteTie.disabled = true;
-    els.battle.disabled = true;
-    status("both models thinking…");
+    els.verdict.hidden = false;
+    els.verdictBody.hidden = true;
+    for (const el of [els.voteA, els.voteB, els.voteTie]) el.disabled = true;
 
-    // Blind: swap which side is which so the label does not leak the source.
+    // blind swap
     const flip = Math.random() < 0.5;
     const sideA = flip ? current.community : current.official;
     const sideB = flip ? current.official : current.community;
-    els.modelA.textContent = "Model A";
-    els.modelB.textContent = "Model B";
+    const uiA = collect("a");
+    const uiB = collect("b");
 
-    const [resultA, resultB] = await Promise.allSettled([
-        streamAnswer(sideA, prompt, els.answerA),
-        streamAnswer(sideB, prompt, els.answerB),
+    uiA.panel.removeAttribute("data-winner");
+    uiB.panel.removeAttribute("data-winner");
+    els.modelA.textContent = "resolving…";
+    els.modelB.textContent = "resolving…";
+    uiA.answer.textContent = "";
+    uiB.answer.textContent = "";
+    uiA.thinkingText.textContent = "";
+    uiB.thinkingText.textContent = "";
+    uiA.thinking.hidden = true;
+    uiB.thinking.hidden = true;
+    uiA.toggle.hidden = true;
+    uiB.toggle.hidden = true;
+    uiA.toggle.classList.remove("on");
+    uiB.toggle.classList.remove("on");
+    uiA.foot.textContent = "";
+    uiB.foot.textContent = "";
+
+    // reveal the real ids immediately (no guessing game for the model names)
+    els.modelA.textContent = sideA;
+    els.modelB.textContent = sideB;
+
+    const [rA, rB] = await Promise.allSettled([
+        stream(sideA, prompt, uiA),
+        stream(sideB, prompt, uiB),
     ]);
 
-    els.answerA.classList.remove("streaming");
-    els.answerB.classList.remove("streaming");
-
-    const finish = (el, result, modelId) => {
-        if (result.status === "rejected") {
-            el.textContent = `error: ${result.reason?.message ?? result.reason}`;
+    const settle = (r, ui, id) => {
+        if (r.status === "rejected") {
+            ui.answer.textContent = `⚠ ${r.reason?.message ?? r.reason}`;
+            ui.answer.classList.remove("cursor");
             return null;
         }
-        const cost = estimateCost(modelId, result.value.usage);
-        return { ...result.value, cost, modelId };
+        const { ms, usage, thinking } = r.value;
+        if (thinking) {
+            ui.toggle.hidden = false;
+            // auto-open while streaming is over; user can collapse
+            ui.thinking.hidden = false;
+            ui.toggle.classList.add("on");
+        }
+        const cost = estimateCost(id, usage);
+        ui.foot.textContent = `${Math.round(ms)} ms · ${
+            usage?.total_tokens ?? "?"
+        } tokens · ${fmtPollen(cost)}`;
+        return { ms, usage, cost };
     };
-    const infoA = finish(els.footA, resultA, sideA);
-    const infoB = finish(els.footB, resultB, sideB);
+    const infoA = settle(rA, uiA, sideA);
+    const infoB = settle(rB, uiB, sideB);
 
-    const describe = (info) =>
-        info === null
-            ? "failed"
-            : `${Math.round(info.ms)} ms · ${info.usage?.total_tokens ?? "?"} tokens · ${
-                  info.cost === null ? "n/a" : fmtPollen(info.cost)
-              }`;
-    els.footA.textContent = describe(infoA);
-    els.footB.textContent = describe(infoB);
-
-    current = { ...current, sideA, sideB, infoA, infoB, flip };
-    status("vote for the better answer");
-    els.voteA.disabled = els.voteB.disabled = els.voteTie.disabled = false;
-    els.battle.disabled = false;
+    current = { ...current, sideA, sideB, infoA, infoB };
+    for (const el of [els.voteA, els.voteB, els.voteTie]) el.disabled = false;
+    setStatus("Vote for the better answer.");
+    running = false;
+    updateSend();
 };
 
+// ---------- vote + reveal ----------
 const reveal = (pick) => {
     if (!current) return;
+    for (const side of ["a", "b"]) {
+        document
+            .querySelector(`[data-side="${side}"]`)
+            .setAttribute("data-winner", "false");
+    }
     const { official, community, sideA, sideB, infoA, infoB } = current;
-    els.revealA.textContent = sideA;
-    els.revealB.textContent = sideB;
-    document
-        .querySelector('[data-side="a"]')
-        .setAttribute("data-revealed", "true");
-    document
-        .querySelector('[data-side="b"]')
-        .setAttribute("data-revealed", "true");
-
     const chosen = pick === "tie" ? null : pick === "a" ? sideA : sideB;
-    const isCommunity = chosen ? chosen === community : null;
-    els.verdict.hidden = false;
+    els.verdictBody.hidden = false;
 
     if (pick === "tie") {
         els.verdictTitle.textContent = "Tie";
-        els.verdictPick.textContent = "no winner";
+        els.factPick.textContent = "no winner";
     } else {
-        els.verdictTitle.textContent = isCommunity
-            ? "Community model won 🥊"
-            : "Official model won";
-        els.verdictPick.textContent = chosen;
-        const winnerCard = pick === "a" ? els.answerA : els.answerB;
-        winnerCard.closest(".card").setAttribute("data-winner", "true");
+        const communityWon = chosen === community;
+        els.verdictTitle.textContent = communityWon
+            ? "Community model took it 🥊"
+            : "Official model held its ground";
+        els.factPick.textContent = `${chosen}${communityWon ? " (community)" : " (official)"}`;
+        const winner = pick === "a" ? collect("a") : collect("b");
+        winner.panel.setAttribute("data-winner", "true");
     }
-
-    const total =
-        (infoA?.cost ?? 0) + (infoB?.cost ?? 0);
-    els.verdictCost.textContent = fmtPollen(total);
-    els.verdictLatency.textContent = `${Math.round(infoA?.ms ?? 0)} / ${Math.round(
+    els.factCost.textContent = fmtPollen(
+        (infoA?.cost ?? 0) + (infoB?.cost ?? 0),
+    );
+    els.factLatency.textContent = `${Math.round(infoA?.ms ?? 0)} / ${Math.round(
         infoB?.ms ?? 0,
     )} ms`;
-    els.verdictNote.textContent = `official: ${official} · community: ${community}`;
+    els.factModels.textContent = `${official}  ·  ${community}`;
+
+    for (const el of [els.voteA, els.voteB, els.voteTie]) el.disabled = true;
 };
 
-const newPrompt = () => {
-    const kicks = [
-        "Explain why the sky is blue in two sentences.",
-        "Write a haiku about breakfast.",
-        "What is the capital of Burkina Faso? One line.",
-        "Give one surprising fact about octopuses.",
-        "Summarise the plot of Romeo and Juliet in 20 words.",
-        "Name three uses for a paperclip.",
-    ];
-    els.prompt.value = kicks[Math.floor(Math.random() * kicks.length)];
+// ---------- misc UI ----------
+const autosize = () => {
+    els.prompt.style.height = "auto";
+    els.prompt.style.height = `${Math.min(els.prompt.scrollHeight, 200)}px`;
+};
+const updateSend = () => {
+    els.send.disabled = !(token && els.prompt.value.trim()) || running;
+};
+
+const wire = () => {
+    renderSuggestions();
+    els.prompt.addEventListener("input", () => {
+        autosize();
+        updateSend();
+    });
+    els.prompt.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            runBattle();
+        }
+    });
+    els.composer.addEventListener("submit", (e) => {
+        e.preventDefault();
+        runBattle();
+    });
+    els.connect.addEventListener("click", () =>
+        connect().catch((err) => setStatus(err.message)),
+    );
+    els.voteA.addEventListener("click", () => reveal("a"));
+    els.voteB.addEventListener("click", () => reveal("b"));
+    els.voteTie.addEventListener("click", () => reveal("tie"));
+    els.again.addEventListener("click", () => {
+        els.arena.hidden = true;
+        els.verdict.hidden = true;
+        els.landing.hidden = false;
+        els.prompt.value = "";
+        autosize();
+        pickPair();
+        updateSend();
+        els.prompt.focus();
+    });
+    const toggle = (btn, panel) =>
+        btn.addEventListener("click", () => {
+            panel.hidden = !panel.hidden;
+            btn.classList.toggle("on", !panel.hidden);
+        });
+    toggle(els.thinkA, els.thinkingA);
+    toggle(els.thinkB, els.thinkingB);
 };
 
 const boot = async () => {
-    els.modeNote.textContent = "BYOP — sign in to spend your own pollen";
+    wire();
+    setStatus("loading catalog…");
     try {
-        const handled = await handleCallback();
+        const connected = await handleCallback();
         signedIn();
         const count = await loadCatalog();
-        status(`${count} impostor matchup(s) ready`);
-        if (handled) status("connected");
-    } catch (error) {
-        status(error.message);
+        pickPair();
+        els.matchup.hidden = pairs.length === 0;
+        els.matchup.replaceChildren(
+            ...pairs.map((p) => {
+                const o = document.createElement("option");
+                o.value = `${p.official}||${p.community}`;
+                o.textContent = `${p.official}  ⚔  ${p.community}`;
+                return o;
+            }),
+        );
+        els.matchup.addEventListener("change", () => {
+            const [official, community] = els.matchup.value.split("||");
+            current = { official, community };
+        });
+        setStatus(`${count} matchups ready`);
+        if (connected) setStatus("connected");
+    } catch (err) {
+        setStatus(err.message);
     }
+    setStatus(els.status.textContent); // preserve
 };
-
-els.connect.addEventListener("click", () =>
-    connect().catch((error) => status(error.message)),
-);
-els.battle.addEventListener("click", () =>
-    runBattle().catch((error) => status(error.message)),
-);
-els.newprompt.addEventListener("click", newPrompt);
-els.voteA.addEventListener("click", () => reveal("a"));
-els.voteB.addEventListener("click", () => reveal("b"));
-els.voteTie.addEventListener("click", () => reveal("tie"));
-els.matchup.addEventListener("change", () => {
-    const [official, community] = els.matchup.value.split("||");
-    current = { official, community };
-    els.verdict.hidden = true;
-});
 
 boot();
