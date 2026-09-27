@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Pollen Arena — community vs official</title>
+        <meta
+            name="description"
+            content="Blind side-by-side battles between official Pollinations models and community models claiming the same name. Vote, then see cost, latency, and usage."
+        />
+        <link rel="stylesheet" href="./style.css" />
+    </head>
+    <body>
+        <header class="bar">
+            <div class="brand">
+                <span class="logo">🥊</span>
+                <span>Pollen&nbsp;Arena</span>
+            </div>
+            <div class="bar-actions">
+                <span id="account" class="account"></span>
+                <button id="connect" class="btn btn-primary">Connect</button>
+            </div>
+        </header>
+
+        <main>
+            <section class="intro">
+                <h1>Community vs Official</h1>
+                <p>
+                    Two models, one prompt, blind. Vote for the better answer,
+                    then see which was the real thing — and what each cost.
+                </p>
+            </section>
+
+            <section class="setup">
+                <label for="matchup">Matchup</label>
+                <select id="matchup" class="select"></select>
+
+                <label for="prompt">Prompt</label>
+                <textarea
+                    id="prompt"
+                    class="textarea"
+                    rows="3"
+                    placeholder="Ask both models the same thing…"
+                >Explain why the sky is blue in two sentences.</textarea>
+
+                <div class="controls">
+                    <button id="battle" class="btn btn-primary" disabled>
+                        Send to both
+                    </button>
+                    <button id="newprompt" class="btn">New prompt</button>
+                    <span id="status" class="status"></span>
+                </div>
+            </section>
+
+            <section id="arena" class="arena" hidden>
+                <article class="card" data-side="a">
+                    <header class="card-head">
+                        <span class="tag">A</span>
+                        <span class="card-model" id="model-a">model A</span>
+                        <span class="reveal-model" id="reveal-a"></span>
+                    </header>
+                    <div class="answer" id="answer-a"></div>
+                    <footer class="card-foot" id="foot-a"></footer>
+                </article>
+
+                <div class="voting">
+                    <button class="vote" id="vote-a" disabled>A is better</button>
+                    <button class="vote" id="vote-tie" disabled>Tie</button>
+                    <button class="vote" id="vote-b" disabled>B is better</button>
+                </div>
+
+                <article class="card" data-side="b">
+                    <header class="card-head">
+                        <span class="tag">B</span>
+                        <span class="card-model" id="model-b">model B</span>
+                        <span class="reveal-model" id="reveal-b"></span>
+                    </header>
+                    <div class="answer" id="answer-b"></div>
+                    <footer class="card-foot" id="foot-b"></footer>
+                </article>
+            </section>
+
+            <section id="verdict" class="verdict" hidden>
+                <h2 id="verdict-title">Verdict</h2>
+                <div class="verdict-grid">
+                    <div class="metric">
+                        <span class="metric-label">You picked</span>
+                        <span class="metric-value" id="verdict-pick">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Cost, A + B</span>
+                        <span class="metric-value" id="verdict-cost">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Latency</span>
+                        <span class="metric-value" id="verdict-latency">—</span>
+                    </div>
+                </div>
+                <p class="note" id="verdict-note"></p>
+            </section>
+        </main>
+
+        <footer class="foot">
+            <span id="mode-note"></span>
+            <a href="https://pollinations.ai" target="_blank" rel="noreferrer"
+                >Pollinations</a
+            >
+        </footer>
+
+        <script type="module" src="./app.js"></script>
+    </body>
+</html>
